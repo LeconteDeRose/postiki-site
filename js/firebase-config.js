@@ -29,10 +29,10 @@ export const USERS = {
   "0xDCQqgcYkbelAACbXKyEX4zlhD2": {
     uid: "0xDCQqgcYkbelAACbXKyEX4zlhD2",
     name: "Дрюша",
-    partnerUid: "e1Kc7LIZcZMAOgPjIQEEjMGPQ7v2"
+    partnerUid: "LqfXjz61hZOotvPPpploEu7QWGp2"
   },
-  "e1Kc7LIZcZMAOgPjIQEEjMGPQ7v2": {
-    uid: "e1Kc7LIZcZMAOgPjIQEEjMGPQ7v2",
+  "LqfXjz61hZOotvPPpploEu7QWGp2": {
+    uid: "LqfXjz61hZOotvPPpploEu7QWGp2",
     name: "Тёфа",
     partnerUid: "0xDCQqgcYkbelAACbXKyEX4zlhD2"
   }
