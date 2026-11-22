@@ -138,9 +138,18 @@
           <!-- Режим редактирования -->
           <div id="author-edit-pane" class="author-pane">
             <input type="text" id="post-title-input" class="title-input" placeholder="Название постика">
-            <div class="editor-meta">
-              <span id="post-word-count">Слов: 0</span>
+          <div class="editor-meta">
+              <div class="editor-counters">
+                <span id="post-word-count">Слов: 0</span>
+                <span class="meta-divider">·</span>
+                <span id="post-cursor-word">Курсор: —</span>
+              </div>
+              <div class="editor-history-controls">
+                <button type="button" id="editor-undo-btn" class="btn btn-secondary btn-sm" disabled title="Отменить (Ctrl+Z)">↶ Назад</button>
+                <button type="button" id="editor-redo-btn" class="btn btn-secondary btn-sm" disabled title="Вернуть (Ctrl+Y)">↷ Вперёд</button>
+              </div>
             </div>
+
             <textarea id="post-content-input" class="content-textarea" placeholder="Пиши постик здесь..."></textarea>
             <div class="editor-footer">
               <button type="button" id="save-post-btn" class="btn btn-primary">Сохранить</button>
