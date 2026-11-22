@@ -16,7 +16,7 @@ export function normalizeWord(text) {
 }
 
 /**
- * Разбор текста поста на абзацы и токены.
+ * Разбор текста поста на абзацы и токены с сохранением точных позиций символов.
  * Нумерация слов везде 1-based (от 1 до wordCount).
  */
 export function parsePostText(rawText) {
@@ -26,26 +26,34 @@ export function parsePostText(rawText) {
   const paragraphs = [];
   const words = [];
   let wordCounter = 0;
+  let lineOffset = 0;
 
   for (const line of lines) {
     if (line.trim() === "") {
       paragraphs.push({ isEmpty: true, tokens: [] });
+      lineOffset += line.length + 1;
       continue;
     }
 
     const rawParts = line.split(/(\s+)/).filter((part) => part.length > 0);
     const tokens = [];
     let pendingPrefix = "";
+    let pendingStart = -1;
+    let pos = lineOffset;
 
     for (let i = 0; i < rawParts.length; i++) {
       const part = rawParts[i];
+      const partStart = pos;
+      const partEnd = pos + part.length;
+      pos = partEnd;
+
       const isSpace = /^\s+$/.test(part);
 
       if (isSpace) {
         if (pendingPrefix !== "") {
           pendingPrefix += part;
         } else {
-          tokens.push({ type: "space", text: part });
+          tokens.push({ type: "space", text: part, start: partStart, end: partEnd });
         }
         continue;
       }
@@ -62,6 +70,9 @@ export function parsePostText(rawText) {
         }
 
         if (hasFutureWord) {
+          if (pendingPrefix === "") {
+            pendingStart = partStart;
+          }
           pendingPrefix += part;
         } else {
           // Слов дальше нет: пробуем приклеить тире к предыдущему слову в этой строке
@@ -80,27 +91,40 @@ export function parsePostText(rawText) {
               tail = popped.text + tail;
             }
             tokens[lastWordIdx].text += tail + pendingPrefix + part;
+            tokens[lastWordIdx].end = partEnd;
             tokens[lastWordIdx].norm = normalizeWord(tokens[lastWordIdx].text);
             pendingPrefix = "";
+            pendingStart = -1;
           } else {
             // Строка состоит только из тире (разделитель сцен вроде "---")
-            tokens.push({ type: "decor", text: pendingPrefix + part });
+            const decorStart = pendingStart !== -1 ? pendingStart : partStart;
+            tokens.push({
+              type: "decor",
+              text: pendingPrefix + part,
+              start: decorStart,
+              end: partEnd
+            });
             pendingPrefix = "";
+            pendingStart = -1;
           }
         }
         continue;
       }
 
       // Обычное слово (вместе с прилипшими знаками препинания и накопленным тире)
+      const wordStart = pendingStart !== -1 ? pendingStart : partStart;
       const fullWordText = pendingPrefix + part;
       pendingPrefix = "";
+      pendingStart = -1;
 
       wordCounter++;
       const wordToken = {
         type: "word",
         index: wordCounter,
         text: fullWordText,
-        norm: normalizeWord(fullWordText)
+        norm: normalizeWord(fullWordText),
+        start: wordStart,
+        end: partEnd
       };
 
       tokens.push(wordToken);
@@ -108,10 +132,16 @@ export function parsePostText(rawText) {
     }
 
     if (pendingPrefix !== "") {
-      tokens.push({ type: "decor", text: pendingPrefix });
+      tokens.push({
+        type: "decor",
+        text: pendingPrefix,
+        start: pendingStart !== -1 ? pendingStart : lineOffset,
+        end: pos
+      });
     }
 
     paragraphs.push({ isEmpty: false, tokens });
+    lineOffset += line.length + 1;
   }
 
   return {
@@ -123,6 +153,65 @@ export function parsePostText(rawText) {
 
 export function countWords(rawText) {
   return parsePostText(rawText).wordCount;
+}
+
+/**
+ * Определяет, на каком слове (или между какими словами) находится курсор в редакторе.
+ * Может принимать уже готовый объект parsed от parsePostText для ускорения.
+ */
+export function getWordInfoAtCursor(rawText, cursorPos, parsedCache = null) {
+  const parsed = parsedCache || parsePostText(rawText);
+  const { words, wordCount } = parsed;
+
+  if (wordCount === 0) {
+    return { status: "empty", total: 0 };
+  }
+
+  const pos = Math.max(0, Number(cursorPos) || 0);
+
+  let lo = 0;
+  let hi = words.length - 1;
+
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const w = words[mid];
+
+    if (pos < w.start) {
+      hi = mid - 1;
+    } else if (pos > w.end) {
+      lo = mid + 1;
+    } else {
+      return {
+        status: "on",
+        index: w.index,
+        text: w.text,
+        total: wordCount
+      };
+    }
+  }
+
+  if (hi < 0) {
+    return {
+      status: "before",
+      nextIndex: words[0].index,
+      total: wordCount
+    };
+  }
+
+  if (lo >= words.length) {
+    return {
+      status: "after",
+      prevIndex: words[words.length - 1].index,
+      total: wordCount
+    };
+  }
+
+  return {
+    status: "between",
+    prevIndex: words[hi].index,
+    nextIndex: words[lo].index,
+    total: wordCount
+  };
 }
 
 /* ==========================================================================
