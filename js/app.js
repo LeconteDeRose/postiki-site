@@ -16,7 +16,8 @@ import {
   revealWord,
   revealRandomWord
 } from "./posts.js";
-import { countWords } from "./word-engine.js";
+import { parsePostText, getWordInfoAtCursor } from "./word-engine.js";
+import { EditorHistory } from "./editor-history.js";
 import {
   pluralizeWords,
   showToast,
@@ -60,6 +61,8 @@ const state = {
   isEditorDirty: false,
   isRevealing: false,
   pendingScrollWord: null,
+  editorParsedText: "",
+  editorParsedCache: null,
   unsubscribers: []
 };
 
@@ -108,6 +111,9 @@ const el = {
   authorEditPane: document.getElementById("author-edit-pane"),
   postTitleInput: document.getElementById("post-title-input"),
   postWordCount: document.getElementById("post-word-count"),
+  postCursorWord: document.getElementById("post-cursor-word"),
+  editorUndoBtn: document.getElementById("editor-undo-btn"),
+  editorRedoBtn: document.getElementById("editor-redo-btn"),
   postContentInput: document.getElementById("post-content-input"),
   savePostBtn: document.getElementById("save-post-btn"),
   closeAuthorWorkspaceBtn: document.getElementById("close-author-workspace-btn"),
@@ -134,8 +140,18 @@ const el = {
   navigatorCloseBtn: document.getElementById("navigator-close-btn")
 };
 
+// История правок редактора (Назад / Вперёд)
+const editorHistory = new EditorHistory({
+  maxSteps: 120,
+  debounceMs: 600,
+  onChange: ({ canUndo, canRedo }) => {
+    el.editorUndoBtn.disabled = !canUndo;
+    el.editorRedoBtn.disabled = !canRedo;
+  }
+});
+
 /* ==========================================================================
- * ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ СОСТОЯНИЯ
+ * ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ СОСТОЯНИЯ И РЕДАКТОРА
  * ========================================================================== */
 
 function getPartnerPosts() {
@@ -192,9 +208,77 @@ function switchMainTab(tabName) {
   });
 }
 
-function updateLiveWordCounter() {
-  const count = countWords(el.postContentInput.value);
-  el.postWordCount.textContent = `Слов: ${count}`;
+/**
+ * Кеширует разбор текста редактора, чтобы перемещение курсора работало мгновенно.
+ */
+function getEditorParsed() {
+  const currentText = el.postContentInput.value;
+  if (!state.editorParsedCache || state.editorParsedText !== currentText) {
+    state.editorParsedText = currentText;
+    state.editorParsedCache = parsePostText(currentText);
+  }
+  return state.editorParsedCache;
+}
+
+function updateCursorIndicator(parsedOverride = null) {
+  const parsed = parsedOverride || getEditorParsed();
+  const cursorPos = el.postContentInput.selectionDirection === "backward"
+    ? (el.postContentInput.selectionStart ?? 0)
+    : (el.postContentInput.selectionEnd ?? 0);
+
+  const info = getWordInfoAtCursor(el.postContentInput.value, cursorPos, parsed);
+
+  if (info.status === "empty") {
+    el.postCursorWord.textContent = "Курсор: —";
+    return;
+  }
+
+  if (info.status === "on") {
+    const preview = info.text.length > 24 ? `${info.text.slice(0, 23)}…` : info.text;
+    el.postCursorWord.textContent = `Слово № ${info.index} («${preview}»)`;
+    return;
+  }
+
+  if (info.status === "before") {
+    el.postCursorWord.textContent = "Перед словом № 1";
+    return;
+  }
+
+  if (info.status === "after") {
+    el.postCursorWord.textContent = `После слова № ${info.prevIndex}`;
+    return;
+  }
+
+  el.postCursorWord.textContent = `Между № ${info.prevIndex} и № ${info.nextIndex}`;
+}
+
+function updateEditorMetrics() {
+  const parsed = getEditorParsed();
+  el.postWordCount.textContent = `Слов: ${parsed.wordCount}`;
+  updateCursorIndicator(parsed);
+}
+
+function applyHistorySnapshot(snapshot) {
+  if (!snapshot) return;
+
+  el.postContentInput.value = snapshot.text;
+  state.isEditorDirty = true;
+  el.postContentInput.focus();
+
+  const maxPos = snapshot.text.length;
+  const start = Math.min(Math.max(0, snapshot.start ?? maxPos), maxPos);
+  const end = Math.min(Math.max(0, snapshot.end ?? maxPos), maxPos);
+  el.postContentInput.setSelectionRange(start, end);
+
+  updateEditorMetrics();
+}
+
+function handleEditorUndo() {
+  applyHistorySnapshot(editorHistory.undo());
+}
+
+function handleEditorRedo() {
+  applyHistorySnapshot(editorHistory.redo());
 }
 
 /* ==========================================================================
@@ -214,7 +298,6 @@ function renderPartnerView() {
 
   el.partnerEmptyState.classList.add("hidden");
 
-  // Если выбранный пост исчез или ещё не выбран — выбираем первый в списке
   if (!partnerPosts.some((p) => p.id === state.selectedPartnerPostId)) {
     state.selectedPartnerPostId = partnerPosts[0].id;
   }
@@ -261,7 +344,6 @@ function renderReaderSection() {
 
   renderReaderCanvas(el.readerCanvas, post, state.voidMode, handleHiddenWordTap);
 
-  // Если только что открыли слово — плавно прокручиваем к нему и подсвечиваем
   if (
     state.pendingScrollWord &&
     state.pendingScrollWord.postId === post.id
@@ -350,7 +432,6 @@ async function handleRevealRandom() {
   try {
     const result = await revealRandomWord(post.id, state.me.uid);
     state.pendingScrollWord = { postId: post.id, wordIndex: result.wordIndex };
-    // Если снимок уже успел прийти до завершения await, прокрутим сразу
     requestAnimationFrame(() => {
       if (
         state.pendingScrollWord &&
@@ -399,7 +480,6 @@ function renderMyView() {
 
   const currentPost = getSelectedMyPost();
   if (state.selectedMyPostId && !currentPost) {
-    // Пост был удалён
     state.selectedMyPostId = null;
     state.isEditorDirty = false;
   }
@@ -430,7 +510,8 @@ function openNewPostEditor() {
 
   el.postTitleInput.value = "";
   el.postContentInput.value = "";
-  updateLiveWordCounter();
+  editorHistory.reset("", 0, 0);
+  updateEditorMetrics();
 
   renderMyView();
   el.postTitleInput.focus();
@@ -444,9 +525,11 @@ function openExistingMyPost(postId) {
   state.selectedMyPostId = post.id;
   state.isEditorDirty = false;
 
+  const content = post.content || "";
   el.postTitleInput.value = post.title || "";
-  el.postContentInput.value = post.content || "";
-  updateLiveWordCounter();
+  el.postContentInput.value = content;
+  editorHistory.reset(content, 0, 0);
+  updateEditorMetrics();
 
   renderMyView();
 }
@@ -492,6 +575,8 @@ function renderAuthorWorkspace(post) {
 }
 
 async function handleSavePost() {
+  editorHistory.flush();
+
   const title = el.postTitleInput.value.trim();
   const content = el.postContentInput.value;
 
@@ -587,6 +672,7 @@ async function handleDeletePost() {
     await deletePost(post, state.me.uid);
     state.selectedMyPostId = null;
     state.isEditorDirty = false;
+    editorHistory.reset("", 0, 0);
     el.authorWorkspace.classList.add("hidden");
     showToast("Постик удалён.");
   } catch (err) {
@@ -707,7 +793,10 @@ function endSession() {
   state.isCreatingNewPost = false;
   state.isEditorDirty = false;
   state.pendingScrollWord = null;
+  state.editorParsedText = "";
+  state.editorParsedCache = null;
 
+  editorHistory.reset("", 0, 0);
   renderRefundBanner([]);
   el.appScreen.classList.add("hidden");
   el.authScreen.classList.remove("hidden");
@@ -775,9 +864,52 @@ function bindEvents() {
     state.isEditorDirty = true;
   });
 
-  el.postContentInput.addEventListener("input", () => {
+  // Ввод текста, история правок и счётчик слова под курсором
+  el.postContentInput.addEventListener("input", (event) => {
     state.isEditorDirty = true;
-    updateLiveWordCounter();
+    const immediate =
+      event.inputType === "insertFromPaste" ||
+      event.inputType === "deleteByCut";
+
+    editorHistory.record(
+      el.postContentInput.value,
+      el.postContentInput.selectionStart ?? 0,
+      el.postContentInput.selectionEnd ?? 0,
+      { immediate }
+    );
+    updateEditorMetrics();
+  });
+
+  el.postContentInput.addEventListener("click", () => updateCursorIndicator());
+  el.postContentInput.addEventListener("keyup", () => updateCursorIndicator());
+  el.postContentInput.addEventListener("focus", () => updateCursorIndicator());
+  el.postContentInput.addEventListener("select", () => updateCursorIndicator());
+
+  // Надёжное отслеживание курсора на сенсорных экранах (телефонах)
+  document.addEventListener("selectionchange", () => {
+    if (document.activeElement === el.postContentInput) {
+      updateCursorIndicator();
+    }
+  });
+
+  // Кнопки и горячие клавиши Назад / Вперёд
+  el.editorUndoBtn.addEventListener("click", handleEditorUndo);
+  el.editorRedoBtn.addEventListener("click", handleEditorRedo);
+
+  el.postContentInput.addEventListener("keydown", (event) => {
+    const mod = event.ctrlKey || event.metaKey;
+    if (!mod || event.altKey) return;
+
+    if (event.code === "KeyZ" && !event.shiftKey) {
+      event.preventDefault();
+      handleEditorUndo();
+    } else if (
+      (event.code === "KeyZ" && event.shiftKey) ||
+      (event.code === "KeyY" && !event.shiftKey)
+    ) {
+      event.preventDefault();
+      handleEditorRedo();
+    }
   });
 
   el.savePostBtn.addEventListener("click", handleSavePost);
@@ -787,6 +919,7 @@ function bindEvents() {
     state.isCreatingNewPost = false;
     state.selectedMyPostId = null;
     state.isEditorDirty = false;
+    editorHistory.reset("", 0, 0);
     el.authorWorkspace.classList.add("hidden");
     renderMyView();
   });
