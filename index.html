@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Сайт для постиков</title>
+  <link rel="stylesheet" href="css/themes.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Экран входа -->
+  <section id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <h1 class="auth-title">Сайт для постиков</h1>
+      <form id="login-form" class="auth-form">
+        <label class="field">
+          <span>Логин (почта)</span>
+          <input type="email" id="login-email" required autocomplete="username" placeholder="name@postiki.app">
+        </label>
+        <label class="field">
+          <span>Пароль</span>
+          <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••">
+        </label>
+        <p id="login-error" class="error-text hidden"></p>
+        <button type="submit" id="login-btn" class="btn btn-primary btn-full">Войти</button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Основной интерфейс -->
+  <div id="app-screen" class="app-screen hidden">
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand">Сайт для постиков</div>
+
+        <div class="header-controls">
+          <div class="theme-switcher" role="group" aria-label="Тема оформления">
+            <button type="button" class="theme-btn" data-theme="light" title="Светлая тема">Светлая</button>
+            <button type="button" class="theme-btn" data-theme="dark" title="Тёмная тема">Тёмная</button>
+            <button type="button" class="theme-btn" data-theme="book" title="Книжная тема">Книжная</button>
+          </div>
+
+          <div class="user-box">
+            <span id="current-user-name" class="user-name">...</span>
+            <button type="button" id="logout-btn" class="btn btn-ghost btn-sm">Выйти</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Баннер возврата слов после правок партнёра -->
+    <div id="refund-banner" class="refund-banner hidden">
+      <div class="refund-banner-inner">
+        <span id="refund-banner-text"></span>
+        <button type="button" id="refund-banner-close" class="btn btn-sm btn-ghost">Понятно</button>
+      </div>
+    </div>
+
+    <!-- Главная навигация -->
+    <nav class="main-nav">
+      <div class="nav-inner">
+        <button type="button" class="nav-tab active" data-tab="partner" id="tab-partner-label">Посты партнёра</button>
+        <button type="button" class="nav-tab" data-tab="my">Мои посты</button>
+        <button type="button" class="nav-tab" data-tab="gifts">Слова и подарки</button>
+      </div>
+    </nav>
+
+    <main class="container">
+
+      <!-- ВКЛАДКА 1: Посты партнёра (чтение и открытие слов) -->
+      <section id="view-partner" class="view-section">
+        <div class="section-top-bar">
+          <div class="balance-pill">
+            Баланс слов: <strong id="partner-balance-badge">0</strong>
+          </div>
+        </div>
+
+        <div id="partner-posts-list" class="posts-strip"></div>
+        <div id="partner-empty-state" class="empty-state hidden">Пока здесь нет постов.</div>
+
+        <article id="reader-section" class="workspace-card hidden">
+          <div class="workspace-header">
+            <div>
+              <h2 id="reader-title" class="post-title"></h2>
+              <div class="post-meta">
+                <span id="reader-stats"></span>
+                <span id="reader-full-badge" class="badge badge-success hidden">Открыт целиком</span>
+              </div>
+            </div>
+            <button type="button" id="reader-navigator-btn" class="btn btn-secondary btn-sm">
+              Открытые (<span id="reader-nav-count">0</span>)
+            </button>
+          </div>
+
+          <div id="reader-controls" class="reader-controls">
+            <div class="reveal-input-group">
+              <input type="number" id="reveal-input" min="1" placeholder="№ слова" class="input-compact">
+              <button type="button" id="reveal-btn" class="btn btn-primary btn-sm">Открыть</button>
+              <button type="button" id="reveal-random-btn" class="btn btn-secondary btn-sm">Случайное</button>
+            </div>
+
+            <div class="segmented-control" role="group" aria-label="Режим пустот">
+              <button type="button" id="void-mode-pure" class="seg-btn active">Чистая пустота</button>
+              <button type="button" id="void-mode-structure" class="seg-btn">Контур структуры</button>
+            </div>
+          </div>
+
+          <div id="reader-canvas" class="post-canvas void-pure"></div>
+        </article>
+      </section>
+
+      <!-- ВКЛАДКА 2: Мои посты (редактор и взгляд на добычу партнёра) -->
+      <section id="view-my" class="view-section hidden">
+        <div class="section-top-bar">
+          <button type="button" id="new-post-btn" class="btn btn-primary">+ Новый постик</button>
+        </div>
+
+        <div id="my-posts-list" class="posts-strip"></div>
+        <div id="my-empty-state" class="empty-state hidden">У тебя пока нет ни одного постика.</div>
+
+        <article id="author-workspace" class="workspace-card hidden">
+          <div class="author-toolbar">
+            <div class="segmented-control">
+              <button type="button" id="author-tab-edit" class="seg-btn active">Редактор</button>
+              <button type="button" id="author-tab-spy" class="seg-btn">Открытые партнёром</button>
+            </div>
+
+            <div class="author-actions">
+              <label class="switch-label">
+                <input type="checkbox" id="author-full-open-toggle">
+                <span>Открыть целиком</span>
+              </label>
+              <button type="button" id="delete-post-btn" class="btn btn-danger btn-sm">Удалить</button>
+            </div>
+          </div>
+
+          <!-- Режим редактирования -->
+          <div id="author-edit-pane" class="author-pane">
+            <input type="text" id="post-title-input" class="title-input" placeholder="Название постика">
+            <div class="editor-meta">
+              <span id="post-word-count">Слов: 0</span>
+            </div>
+            <textarea id="post-content-input" class="content-textarea" placeholder="Пиши постик здесь..."></textarea>
+            <div class="editor-footer">
+              <button type="button" id="save-post-btn" class="btn btn-primary">Сохранить</button>
+              <button type="button" id="close-author-workspace-btn" class="btn btn-ghost">Свернуть</button>
+            </div>
+          </div>
+
+          <!-- Режим просмотра открытых партнёром слов -->
+          <div id="author-spy-pane" class="author-pane hidden">
+            <div class="spy-header">
+              <span id="spy-stats" class="post-meta"></span>
+              <button type="button" id="author-navigator-btn" class="btn btn-secondary btn-sm">
+                Список открытых (<span id="author-nav-count">0</span>)
+              </button>
+            </div>
+            <div id="author-spy-canvas" class="post-canvas author-spy-canvas"></div>
+          </div>
+        </article>
+      </section>
+
+      <!-- ВКЛАДКА 3: Слова и подарки -->
+      <section id="view-gifts" class="view-section hidden">
+        <div class="balances-grid">
+          <div class="stat-card">
+            <div class="stat-label">Твой баланс</div>
+            <div id="gifts-my-balance" class="stat-value">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Баланс (<span id="gifts-partner-label">партнёр</span>)</div>
+            <div id="gifts-partner-balance" class="stat-value">0</div>
+          </div>
+        </div>
+
+        <div class="workspace-card gift-card">
+          <h2 class="card-subtitle">Подарить слова — <span id="gift-target-name">...</span></h2>
+          <form id="gift-form" class="gift-form">
+            <div class="gift-amount-row">
+              <div class="quick-amounts">
+                <button type="button" class="btn btn-secondary btn-sm quick-amount-btn" data-amount="1">+1</button>
+                <button type="button" class="btn btn-secondary btn-sm quick-amount-btn" data-amount="3">+3</button>
+                <button type="button" class="btn btn-secondary btn-sm quick-amount-btn" data-amount="5">+5</button>
+              </div>
+              <input type="number" id="gift-amount-input" min="1" max="500" value="1" required class="input-compact">
+            </div>
+
+            <input type="text" id="gift-note-input" maxlength="160" placeholder="Подпись к подарку (необязательно)">
+            <button type="submit" id="gift-submit-btn" class="btn btn-primary">Подарить</button>
+          </form>
+        </div>
+
+        <div class="workspace-card">
+          <h2 class="card-subtitle">История</h2>
+          <div id="history-list" class="history-list"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Модальное окно подтверждения -->
+  <div id="confirm-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <h3 id="confirm-title" class="modal-title">Подтверждение</h3>
+      <p id="confirm-message" class="modal-message"></p>
+      <div class="modal-actions">
+        <button type="button" id="confirm-cancel-btn" class="btn btn-ghost">Отмена</button>
+        <button type="button" id="confirm-ok-btn" class="btn btn-primary">Открыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Навигатор по открытым словам -->
+  <div id="navigator-overlay" class="drawer-overlay hidden">
+    <aside id="navigator-drawer" class="drawer">
+      <div class="drawer-header">
+        <h3>Открытые слова</h3>
+        <button type="button" id="navigator-close-btn" class="btn btn-ghost btn-sm">Закрыть</button>
+      </div>
+      <div id="navigator-list" class="drawer-list"></div>
+    </aside>
+  </div>
+
+  <!-- Всплывающие уведомления -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
