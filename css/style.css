@@ -612,9 +612,37 @@ textarea:focus {
 }
 
 .editor-meta {
-  font-size: 0.84rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
   color: var(--text-muted);
   margin-bottom: 10px;
+}
+
+.editor-counters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.meta-divider {
+  opacity: 0.5;
+}
+
+#post-cursor-word {
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+.editor-history-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .content-textarea {
